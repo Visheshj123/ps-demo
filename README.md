@@ -10,6 +10,17 @@ pip install -r requirements.txt
 python main.py
 ```
 
+If you run into pytorch installing issue, try to use python 3.8.
+
+e.g.
+
+```bash
+# install 3.8.10 on MacOS
+brew install pyenv
+pyenv install 3.8.10
+pyenv global pyenv
+```
+
 ### Run in docker
 
 ```bash
