@@ -18,6 +18,6 @@ docker run ps-demo:1.0
 ```
 
 ## TODO
-- [ ] Multiple Servers Scenario
+- [x] Multiple Servers Scenario
 - [ ] Fault Tolerance
 - [ ] Split DB

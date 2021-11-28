@@ -1,6 +1,14 @@
+from typing import OrderedDict, Tuple, List
+import numpy as np
 import ray
 import torch
-from ps import ParameterServer, ParameterServerManager, ParameterServerMultiple, Worker
+from ps import (
+    ParameterServer,
+    ParameterServerManager,
+    ParameterServerMultiple,
+    Worker,
+    WorkerMultiple,
+)
 from config import ITERATIONS, NSERVERS, NWORKERS
 from model import Model
 from data import get_data_loader
@@ -58,22 +66,56 @@ def signle_server_asynchronous_training(lr):
     ray.shutdown()
 
 
+def flatten_weights(
+    weights: OrderedDict[str, torch.Tensor], layer_shapes: List[Tuple[str, torch.Size]]
+):
+    flat_weights = torch.Tensor()
+    for layer_name, _ in layer_shapes:
+        flat_weights = torch.cat([flat_weights, weights[layer_name].flatten()], dim=0)
+    return flat_weights
+
+
+def flatten_gradients(gradients: List[np.ndarray]) -> np.ndarray:
+    return np.concatenate([g.flatten() for g in gradients], axis=0)
+
+
 def multiple_server_asynchronous_training(lr):
     ray.init()
-    servers = [ParameterServerMultiple.remote() for i in range(NSERVERS)]
-    workers = [Worker.remote() for i in range(NWORKERS)]
-    server_manager = ParameterServerManager(servers)
-    
-    # for evaluating accuracy
+
+    # setup workers and servers
+    servers = [ParameterServerMultiple.remote() for _ in range(NSERVERS)]
+    id_server_map = {str(server._actor_id.hex()): server for server in servers}
+    server_ids = list(id_server_map)
+    server_manager = ParameterServerManager(server_ids)
+    workers = [WorkerMultiple.remote() for _ in range(NWORKERS)]
+
+    # setup initial weights
     model = Model()
     _, test_loader = get_data_loader()
 
-    # get initial weights w_0
-    current_weights = [server.get_weights.remote() for server in servers]
+    current_weights = model.get_weights()
+    layer_shapes = [(k, current_weights[k].shape) for k in current_weights]
 
+    flat_weights = flatten_weights(current_weights, layer_shapes)
+
+    # make partitions on weights
+    partitions = ray.get(server_manager.split_weights.remote(layer_shapes))
+
+    indices: List[List[int]] = []
+    for server_id in partitions:
+        index = partitions[server_id]
+        indices.append(index)
+        parameter = torch.take(flat_weights, torch.tensor(index))
+        id_server_map[server_id].set_weights(parameter)
+
+    # worker pull weights and compute gradients
     gradients = {}
     for worker in workers:
-        gradients[worker.compute_gradients.remote(current_weights)] = worker
+        weights = [
+            id_server_map[server_id].get_weights.remote() for server_id in partitions
+        ]
+        worker.pull_weights.remote(indices, weights)
+        gradients[worker.compute_gradients.remote()] = worker
 
     for i in range(ITERATIONS * NWORKERS):
         ready_gradient_list, _ = ray.wait(list(gradients))
@@ -81,7 +123,17 @@ def multiple_server_asynchronous_training(lr):
         worker = gradients.pop(ready_gradient_id)
 
         # Compute and apply gradients
-        raise Exception("TODO")
+        g = ray.get(ready_gradient_id)
+        flat_gradients = flatten_gradients(g, layer_shapes)
+        weights = [
+            id_server_map[server_id].apply_gradients.remote(
+                flat_gradients.take(partitions[server_id])
+            )
+            for server_id in partitions
+        ]
+        worker.pull_weight.remote(indices, weights)
+
+        gradients[worker.compute_gradients.remote()] = worker
 
         if i % 10 == 0:
             # Evaluate the current model after every 10 updates.

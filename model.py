@@ -1,3 +1,4 @@
+from typing import OrderedDict
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -5,6 +6,7 @@ import torch.nn.functional as F
 
 class Model(nn.Module):
     """implement as section 2.5 in our document"""
+
     def __init__(self):
         super(Model, self).__init__()
         self.linear_stack = nn.Sequential(
@@ -19,10 +21,10 @@ class Model(nn.Module):
         logits = self.linear_stack(x)
         return F.log_softmax(logits, dim=1)
 
-    def get_weights(self):
+    def get_weights(self) -> OrderedDict[str, torch.Tensor]:
         return {k: v.cpu() for k, v in self.state_dict().items()}
 
-    def set_weights(self, weights):
+    def set_weights(self, weights: OrderedDict[str, torch.Tensor]):
         self.load_state_dict(weights)
 
     def get_gradients(self):
