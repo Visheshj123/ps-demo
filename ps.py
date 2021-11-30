@@ -6,6 +6,19 @@ from model import Model
 from consistent_hash import ConsistentHashingRing
 from data import get_data_loader
 
+# Worker: 
+# worker is going to append json to worker_id_file (logging)
+# EX: 
+# {time: 13:42, status: OK, task_id: id}
+# {time: 13:43, status: OK, task_id: id}
+
+# Master: 
+# for file in worker_file_arr:
+#     if time is in past 20 seconds && status ok 
+#           continue
+#     else 
+#           remove_worker(worker_id)
+#           add_worker(new_worker_id, old_work)
 
 @ray.remote
 class Worker:
