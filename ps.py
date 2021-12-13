@@ -8,6 +8,7 @@ from data import get_data_loader
 import random
 import time
 import os
+import asyncio
 # Worker: 
 # worker is going to append json to worker_id_file (logging)
 # EX: 
@@ -51,11 +52,18 @@ class Worker:
         output = self.model(data)
         loss = F.nll_loss(output, target)
         loss.backward()
-        if random.random() < .1:
+        if random.random() < .5:
             os._exit(0)
-        time.sleep(10)
+        #time.sleep(10)
         self.status = 0
         return self.model.get_gradients()
+    def async_compute_gradients(self,weights,task):
+        self.status = 1
+        self.task = task
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        asyncio.get_event_loop().run_until_complete(self.compute_gradients(weights,task))
     def heartbeat(self):
         return {'timestamp':time.time(),'status':self.status,'task':self.task}
 
