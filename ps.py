@@ -5,7 +5,8 @@ import numpy as np
 from model import Model
 from consistent_hash import ConsistentHashingRing
 from data import get_data_loader
-
+import random
+import os
 # Worker: 
 # worker is going to append json to worker_id_file (logging)
 # EX: 
@@ -29,7 +30,8 @@ class Worker:
     4. Push gradients to server
     """
 
-    def __init__(self):
+    def __init__(self,id):
+        self.id = id
         self.model = Model()
         self.data_iterator = iter(get_data_loader()[0])  # train_loader
 
@@ -44,6 +46,8 @@ class Worker:
         output = self.model(data)
         loss = F.nll_loss(output, target)
         loss.backward()
+        if random.random() < .1:
+            os._exit(0)
         return self.model.get_gradients()
 
 
