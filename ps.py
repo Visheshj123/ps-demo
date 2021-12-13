@@ -6,6 +6,7 @@ from model import Model
 from consistent_hash import ConsistentHashingRing
 from data import get_data_loader
 import random
+import time
 import os
 # Worker: 
 # worker is going to append json to worker_id_file (logging)
@@ -33,9 +34,13 @@ class Worker:
     def __init__(self,id):
         self.id = id
         self.model = Model()
+        self.status = 0
+        self.task = None
         self.data_iterator = iter(get_data_loader()[0])  # train_loader
 
-    def compute_gradients(self, weights):
+    def compute_gradients(self, weights,task):
+        self.task = task
+        self.status = 1
         self.model.set_weights(weights)
         try:
             data, target = next(self.data_iterator)
@@ -48,7 +53,11 @@ class Worker:
         loss.backward()
         if random.random() < .1:
             os._exit(0)
+        time.sleep(10)
+        self.status = 0
         return self.model.get_gradients()
+    def heartbeat(self):
+        return {'timestamp':time.time(),'status':self.status,'task':self.task}
 
 
 @ray.remote

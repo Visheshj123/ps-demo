@@ -46,16 +46,22 @@ def signle_server_asynchronous_training(lr):
                 gradients[wid] = worker
                 succeed = True
             except (ray.exceptions.RayActorError, ray.exceptions.RayTaskError) as e:
-                print("ERRRRRRRRRRRR")
-                print(wid)
+                print('\n\n\n\nI ERRORED\n\n\n')
                 new_worker = worker.remote()
                 gradients[wid] = new_worker
-            
-    for i in range(ITERATIONS * NWORKERS):
+    i = 0 
+    while i < ITERATIONS * NWORKERS:
         #
         ready_gradient_list, _ = ray.wait(list(gradients))
+        print(ready_gradient_list)
+        print(gradients)
         ready_gradient_id = ready_gradient_list[0]
-        worker = gradients.pop(wids.index(ready_gradient_id))
+        if ready_gradient_id not in gradients:
+            ready_gradient_list = ready_gradient_list[:1]
+            continue
+        print(workers)
+        print(ready_gradient_id)
+        worker = gradients.pop(ready_gradient_id)
 
         # Compute and apply gradients
         succeed = False
@@ -84,6 +90,7 @@ def signle_server_asynchronous_training(lr):
             model.set_weights(ray.get(current_weights))
             accuracy = evaluate(model, test_loader)
             print("Iter {}: \taccuracy is {:.1f}".format(i, accuracy))
+        i+=1
 
     # Clean up Ray resources and processes
     ray.shutdown()
@@ -112,7 +119,7 @@ def multiple_server_asynchronous_training(lr):
         worker = gradients.pop(ready_gradient_id)
 
         # Compute and apply gradients
-        raise Exception("TODO")
+        # raise Exception("TODO")
 
         if i % 10 == 0:
             # Evaluate the current model after every 10 updates.
