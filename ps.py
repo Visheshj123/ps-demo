@@ -23,7 +23,7 @@ import asyncio
 #           remove_worker(worker_id)
 #           add_worker(new_worker_id, old_work)
 
-@ray.remote
+@ray.remote(max_restarts=5, max_task_retries=-1)
 class Worker:
     """SGD worker:
     1. Read a minibatch X,Y
