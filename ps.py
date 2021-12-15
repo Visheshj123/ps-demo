@@ -23,7 +23,7 @@ import asyncio
 #           remove_worker(worker_id)
 #           add_worker(new_worker_id, old_work)
 
-@ray.remote(max_restarts=5, max_task_retries=-1)
+@ray.remote(max_restarts = 5, max_task_retries = -1)
 class Worker:
     """SGD worker:
     1. Read a minibatch X,Y
@@ -52,23 +52,23 @@ class Worker:
         output = self.model(data)
         loss = F.nll_loss(output, target)
         loss.backward()
-        if random.random() < .5:
+        if random.random() < .25:
             os._exit(0)
-        #time.sleep(10)
         self.status = 0
         return self.model.get_gradients()
+
     def async_compute_gradients(self,weights,task):
         self.status = 1
         self.task = task
-
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         asyncio.get_event_loop().run_until_complete(self.compute_gradients(weights,task))
+        
     def heartbeat(self):
         return {'timestamp':time.time(),'status':self.status,'task':self.task}
 
 
-@ray.remote
+@ray.remote(max_restarts=5, max_task_retries=-1)
 class ParameterServer:
     """Single parameter server scenario
     Once received gradients from worker,
