@@ -52,8 +52,10 @@ class Worker:
         output = self.model(data)
         loss = F.nll_loss(output, target)
         loss.backward()
-        if random.random() < .25:
-            os._exit(0)
+
+        # Fault tolerance random failure testing
+        #if random.random() < .25:
+        #    os._exit(0)
         self.status = 0
         return self.model.get_gradients()
 
@@ -63,7 +65,7 @@ class Worker:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         asyncio.get_event_loop().run_until_complete(self.compute_gradients(weights,task))
-        
+
     def heartbeat(self):
         return {'timestamp':time.time(),'status':self.status,'task':self.task}
 
