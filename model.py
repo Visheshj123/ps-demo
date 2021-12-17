@@ -22,7 +22,8 @@ class Model(nn.Module):
         return F.log_softmax(logits, dim=1)
 
     def get_weights(self) -> OrderedDict[str, torch.Tensor]:
-        return {k: v.cpu() for k, v in self.state_dict().items()}
+        return {k: v.cpu() for k, v in self.state_dict().items()} 
+        
 
     def set_weights(self, weights: OrderedDict[str, torch.Tensor]):
         self.load_state_dict(weights)

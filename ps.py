@@ -17,16 +17,19 @@ class Worker:
     4. Push gradients to server
     """
 
-    def __init__(self):
+    def __init__(self, batch_idx):
         self.model = Model()
-        self.data_iterator = iter(get_data_loader()[0])  # train_loader
+        self.batch_idx = batch_idx
+        self.data_iterator = iter(get_data_loader(self.batch_idx)[0])  # train_loader
+        print('batch range is from {}'.format(len(batch_idx)))
+        print('len of data_iterator is {}'.format(len(self.data_iterator)))
 
     def compute_gradients(self, weights):
         self.model.set_weights(weights)
         try:
-            data, target = next(self.data_iterator)
+            data, target = next(self.data_iterator) #get next batch of data and labels
         except StopIteration:  # When the epoch ends, start a new epoch.
-            self.data_iterator = iter(get_data_loader()[0])
+            self.data_iterator = iter(get_data_loader(self.batch_idx)[0])
             data, target = next(self.data_iterator)
         self.model.zero_grad()
         output = self.model(data)
@@ -65,9 +68,10 @@ class WorkerMultiple:
     Worker in multiple servers scenario
     """
 
-    def __init__(self):
+    def __init__(self, batch_idx):
         self.model = Model()
-        self.data_iterator = iter(get_data_loader()[0])  # train_loader
+        self.batch_idx = batch_idx
+        self.data_iterator = iter(get_data_loader(self.batch_idx)[0])  # train_loader
 
     def pull_weights(
         self,
@@ -106,7 +110,7 @@ class WorkerMultiple:
         try:
             data, target = next(self.data_iterator)
         except StopIteration:  # When the epoch ends, start a new epoch.
-            self.data_iterator = iter(get_data_loader()[0])
+            self.data_iterator = iter(get_data_loader(self.batch_idx)[0])
             data, target = next(self.data_iterator)
         self.model.zero_grad()
         output = self.model(data)

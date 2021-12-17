@@ -9,7 +9,7 @@ from ps import (
     Worker,
     WorkerMultiple,
 )
-from config import ITERATIONS, NSERVERS, NWORKERS
+from config import DATASET_LEN, ITERATIONS, NSERVERS, NWORKERS
 from model import Model
 from data import get_data_loader
 
@@ -31,13 +31,20 @@ def evaluate(model, test_loader):
     return 100.0 * correct / total
 
 
+
+
+
 def signle_server_asynchronous_training(lr):
     ray.init()
     server = ParameterServer.remote(lr)
-    workers = [Worker.remote() for i in range(NWORKERS)]
+    sample_idx = np.random.choice(DATASET_LEN,DATASET_LEN, replace=False)
+    batches = np.array_split(sample_idx,NWORKERS) #splits indicies into evenly sized arrays
+    #generate NWORKERS number of evenly split datasets
+    workers = [Worker.remote(batches[i]) for i in range(NWORKERS)]
 
     # for evaluating accuracy
     model = Model()
+    #TODO: pass in subset indicies to workers
     _, test_loader = get_data_loader()
 
     # get initial weights w_0
@@ -83,11 +90,13 @@ def multiple_server_asynchronous_training(lr):
     ray.init()
 
     # setup workers and servers
-    servers = [ParameterServerMultiple.remote() for _ in range(NSERVERS)]
+    servers = [ParameterServerMultiple.remote(lr) for _ in range(NSERVERS)]
     id_server_map = {str(server._actor_id.hex()): server for server in servers}
     server_ids = list(id_server_map)
     server_manager = ParameterServerManager(server_ids)
-    workers = [WorkerMultiple.remote() for _ in range(NWORKERS)]
+    sample_idx = np.random.choice(DATASET_LEN,DATASET_LEN, replace=False) #indicies of training set
+    batches = np.array_split(sample_idx,NWORKERS) #splits indicies into evenly sized arrays
+    workers = [WorkerMultiple.remote(batches[i]) for i in range(NWORKERS)]
 
     # setup initial weights
     model = Model()
