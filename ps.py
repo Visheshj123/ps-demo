@@ -6,9 +6,25 @@ import numpy as np
 from model import Model
 from consistent_hash import ConsistentHashingRing
 from data import get_data_loader
+import random
+import time
+import os
+import asyncio
+# Worker: 
+# worker is going to append json to worker_id_file (logging)
+# EX: 
+# {time: 13:42, status: OK, task_id: id}
+# {time: 13:43, status: OK, task_id: id}
 
+# Master: 
+# for file in worker_file_arr:
+#     if time is in past 20 seconds && status ok 
+#           continue
+#     else 
+#           remove_worker(worker_id)
+#           add_worker(new_worker_id, old_work)
 
-@ray.remote
+@ray.remote(max_restarts = 5, max_task_retries = -1)
 class Worker:
     """SGD worker:
     1. Read a minibatch X,Y
@@ -17,14 +33,18 @@ class Worker:
     4. Push gradients to server
     """
 
-    def __init__(self, batch_idx):
+
+    def __init__(self,id, batch_idx):
+        self.id = id
         self.model = Model()
+        self.status = 0
         self.batch_idx = batch_idx
         self.data_iterator = iter(get_data_loader(self.batch_idx)[0])  # train_loader
-        print('batch range is from {}'.format(len(batch_idx)))
-        print('len of data_iterator is {}'.format(len(self.data_iterator)))
 
-    def compute_gradients(self, weights):
+
+    def compute_gradients(self, weights,task):
+        self.task = task
+        self.status = 1
         self.model.set_weights(weights)
         try:
             data, target = next(self.data_iterator) #get next batch of data and labels
@@ -35,10 +55,25 @@ class Worker:
         output = self.model(data)
         loss = F.nll_loss(output, target)
         loss.backward()
+
+        # Fault tolerance random failure testing
+        #if random.random() < .25:
+        #    os._exit(0)
+        self.status = 0
         return self.model.get_gradients()
 
+    def async_compute_gradients(self,weights,task):
+        self.status = 1
+        self.task = task
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        asyncio.get_event_loop().run_until_complete(self.compute_gradients(weights,task))
 
-@ray.remote
+    def heartbeat(self):
+        return {'timestamp':time.time(),'status':self.status,'task':self.task}
+
+
+@ray.remote(max_restarts=5, max_task_retries=-1)
 class ParameterServer:
     """Single parameter server scenario
     Once received gradients from worker,
