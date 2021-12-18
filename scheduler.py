@@ -32,9 +32,9 @@ def evaluate(model, test_loader):
 
 
 def single_server_asynchronous_training(lr):
-    ray.init()
+    ray.init(ignore_reinit_error=True, _enable_object_reconstruction=True)
     server = ParameterServer.remote(lr)
-    workers = [Worker.remote() for i in range(NWORKERS)]
+    workers = [Worker.remote(i) for i in range(NWORKERS)]
 
     # for evaluating accuracy
     model = Model()
@@ -51,7 +51,7 @@ def single_server_asynchronous_training(lr):
     # ray._raylet.ObjectRef -> ray.actor.ActorHandle
     gradients = {}
     for worker in workers:
-        gradients[worker.compute_gradients.remote(current_weights)] = worker
+        gradients[worker.compute_gradients.remote(current_weights, 0)] = worker
 
     for i in range(ITERATIONS * NWORKERS):
         ready_gradient_list, _ = ray.wait(list(gradients))
@@ -60,7 +60,7 @@ def single_server_asynchronous_training(lr):
 
         # Compute and apply gradients
         current_weights = server.apply_gradients.remote(ready_gradient_id)
-        gradients[worker.compute_gradients.remote(current_weights)] = worker
+        gradients[worker.compute_gradients.remote(current_weights, 0)] = worker
 
         if i % 10 == 0:
             # Evaluate the current model after every 10 updates.
