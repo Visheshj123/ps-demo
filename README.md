@@ -32,3 +32,7 @@ docker run ps-demo:1.0
 - [x] Multiple Servers Scenario
 - [ ] Fault Tolerance
 - [ ] Split DB
+
+## Fault Tolerance
+1. get weights from worker OR server.
+2. store the weights in he backup server.

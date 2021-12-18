@@ -21,6 +21,10 @@ class Worker:
         self.model = Model()
         self.data_iterator = iter(get_data_loader()[0])  # train_loader
 
+    def get_weights(self):
+        """get weights for back up"""
+        return self.model.get_weights()
+
     def compute_gradients(self, weights):
         self.model.set_weights(weights)
         try:
@@ -80,7 +84,8 @@ class WorkerMultiple:
         flat_weights = torch.Tensor(num_parameters)
 
         for i, w in zip(indices, weights):
-            flat_weights.put_(torch.Tensor(i), w)
+            idx = torch.tensor(i)
+            flat_weights.put_(idx, w)
 
         flat_weights_slices: Dict[str, slice] = {}
 
@@ -114,6 +119,9 @@ class WorkerMultiple:
         loss.backward()
         return self.model.get_gradients()
 
+    def get_weights(self):
+        return self.model.get_weights()
+
 
 @ray.remote
 class ParameterServerMultiple:
@@ -140,7 +148,7 @@ class ParameterServerMultiple:
         if self.weights == None:
             raise Exception("weights are not initalized")
         lr = self.lr() if callable(self.lr) else self.lr
-        self.weights -= lr * torch.Tensor(gradients)
+        self.weights -= lr * torch.tensor(gradients)
         return self.weights
 
     def get_weights(self):
@@ -168,15 +176,7 @@ class ParameterServerManager:
         self.ring = ConsistentHashingRing(server_ids)
         self.server_ids = server_ids
 
-    def split_weights(self, layer_shapes: List[Tuple[str, torch.Size]]):
-        # count total parameters
-        num_parameters = 0
-        for _, shape in layer_shapes:
-            if len(shape) == 1:
-                num_parameters += shape[0]
-            elif len(shape) == 2:
-                num_parameters += shape[0] * shape[1]
-
+    def split_weights(self, num_parameters):
         # make partition using consistent hash ring
         parameters_partition: Dict[str, List[int]] = {
             server_id: [] for server_id in self.server_ids
