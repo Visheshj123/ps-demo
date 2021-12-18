@@ -10,21 +10,23 @@ import random
 import time
 import os
 import asyncio
-# Worker: 
+
+# Worker:
 # worker is going to append json to worker_id_file (logging)
-# EX: 
+# EX:
 # {time: 13:42, status: OK, task_id: id}
 # {time: 13:43, status: OK, task_id: id}
 
-# Master: 
+# Master:
 # for file in worker_file_arr:
-#     if time is in past 20 seconds && status ok 
+#     if time is in past 20 seconds && status ok
 #           continue
-#     else 
+#     else
 #           remove_worker(worker_id)
 #           add_worker(new_worker_id, old_work)
 
-@ray.remote(max_restarts = 5, max_task_retries = -1)
+
+@ray.remote(max_restarts=5, max_task_retries=-1)
 class Worker:
     """SGD worker:
     1. Read a minibatch X,Y
@@ -32,7 +34,6 @@ class Worker:
     3. Compute gradients
     4. Push gradients to server
     """
-
 
     def __init__(self,id, batch_idx):
         self.id = id
@@ -42,7 +43,11 @@ class Worker:
         self.data_iterator = iter(get_data_loader(self.batch_idx)[0])  # train_loader
 
 
-    def compute_gradients(self, weights,task):
+    def get_weights(self):
+        """get weights for back up"""
+        return self.model.get_weights()
+
+    def compute_gradients(self, weights, task):
         self.task = task
         self.status = 1
         self.model.set_weights(weights)
@@ -57,20 +62,22 @@ class Worker:
         loss.backward()
 
         # Fault tolerance random failure testing
-        #if random.random() < .25:
+        # if random.random() < .25:
         #    os._exit(0)
         self.status = 0
         return self.model.get_gradients()
 
-    def async_compute_gradients(self,weights,task):
+    def async_compute_gradients(self, weights, task):
         self.status = 1
         self.task = task
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        asyncio.get_event_loop().run_until_complete(self.compute_gradients(weights,task))
+        asyncio.get_event_loop().run_until_complete(
+            self.compute_gradients(weights, task)
+        )
 
     def heartbeat(self):
-        return {'timestamp':time.time(),'status':self.status,'task':self.task}
+        return {"timestamp": time.time(), "status": self.status, "task": self.task}
 
 
 @ray.remote(max_restarts=5, max_task_retries=-1)
@@ -119,7 +126,8 @@ class WorkerMultiple:
         flat_weights = torch.Tensor(num_parameters)
 
         for i, w in zip(indices, weights):
-            flat_weights.put_(torch.Tensor(i), w)
+            idx = torch.tensor(i)
+            flat_weights.put_(idx, w)
 
         flat_weights_slices: Dict[str, slice] = {}
 
@@ -153,6 +161,9 @@ class WorkerMultiple:
         loss.backward()
         return self.model.get_gradients()
 
+    def get_weights(self):
+        return self.model.get_weights()
+
 
 @ray.remote
 class ParameterServerMultiple:
@@ -179,7 +190,7 @@ class ParameterServerMultiple:
         if self.weights == None:
             raise Exception("weights are not initalized")
         lr = self.lr() if callable(self.lr) else self.lr
-        self.weights -= lr * torch.Tensor(gradients)
+        self.weights -= lr * torch.tensor(gradients)
         return self.weights
 
     def get_weights(self):
@@ -207,15 +218,7 @@ class ParameterServerManager:
         self.ring = ConsistentHashingRing(server_ids)
         self.server_ids = server_ids
 
-    def split_weights(self, layer_shapes: List[Tuple[str, torch.Size]]):
-        # count total parameters
-        num_parameters = 0
-        for _, shape in layer_shapes:
-            if len(shape) == 1:
-                num_parameters += shape[0]
-            elif len(shape) == 2:
-                num_parameters += shape[0] * shape[1]
-
+    def split_weights(self, num_parameters):
         # make partition using consistent hash ring
         parameters_partition: Dict[str, List[int]] = {
             server_id: [] for server_id in self.server_ids
